@@ -1,4 +1,4 @@
-package com.wix.detox;
+package com.wix.detox.adapters.server;
 
 import android.util.Log;
 
@@ -32,13 +32,13 @@ public class WebSocketClient {
     private String sessionId;
     private WebSocket websocket = null;
 
-    private final ActionHandler actionHandler;
-    private final WebSocketEventsHandler wsEventsHandler = new WebSocketEventsHandler();
+    private final WSEventsHandler wsEventsHandler;
+    private final WebSocketEventsListener wsEventListener = new WebSocketEventsListener();
 
     private static final int NORMAL_CLOSURE_STATUS = 1000;
 
-    public WebSocketClient(ActionHandler actionHandler) {
-        this.actionHandler = actionHandler;
+    public WebSocketClient(WSEventsHandler wsEventsHandler) {
+        this.wsEventsHandler = wsEventsHandler;
     }
 
     public void connectToServer(String url, String sessionId) {
@@ -54,7 +54,7 @@ public class WebSocketClient {
                 .build();
 
         final Request request = new Request.Builder().url(url).build();
-        this.websocket = client.newWebSocket(request, wsEventsHandler);
+        this.websocket = client.newWebSocket(request, wsEventListener);
 
         client.dispatcher().executorService().shutdown();
     }
@@ -80,8 +80,8 @@ public class WebSocketClient {
 
             Log.d(LOG_TAG, "Received action '" + type + "' (params=" + params + ")");
 
-            if (actionHandler != null) {
-                actionHandler.onAction(type, params.toString(), messageId);
+            if (wsEventsHandler != null) {
+                wsEventsHandler.onAction(type, params.toString(), messageId);
             }
         } catch (JSONException e) {
             Log.e(LOG_TAG, "Detox Error: receiveAction decode - " + e.toString());
@@ -92,13 +92,13 @@ public class WebSocketClient {
      * These methods are called on an inner worker thread.
      * @see <a href="https://medium.com/@jakewharton/listener-messages-are-called-on-a-background-thread-since-okhttp-is-agnostic-with-respect-to-5fdc5182e240">OkHTTP</a>
      */
-    public interface ActionHandler {
+    public interface WSEventsHandler {
         void onAction(String type, String params, long messageId);
         void onConnect();
         void onClosed();
     }
 
-    private class WebSocketEventsHandler extends WebSocketListener {
+    private class WebSocketEventsListener extends WebSocketListener {
         @Override
         public void onOpen(WebSocket webSocket, Response response) {
             Log.d(LOG_TAG, "At onOpen");
@@ -107,7 +107,7 @@ public class WebSocketClient {
             params.put("sessionId", sessionId);
             params.put("role", "app");
             sendAction("login", params, 0L);
-            actionHandler.onConnect();
+            wsEventsHandler.onConnect();
         }
 
         @Override
@@ -139,7 +139,7 @@ public class WebSocketClient {
         @Override
         public void onClosed(WebSocket webSocket, int code, String reason) {
             closing = true;
-            actionHandler.onClosed();
+            wsEventsHandler.onClosed();
         }
 
         @Override
